@@ -1,0 +1,78 @@
+from typing import List
+
+from discord import User, Embed, Profile, Guild, Member, Permissions, Message
+from discord.ext.commands import Bot, command, Context as CommandContext, Context
+
+
+async def _context_react(self: Context, emoji):
+    await self.message.add_reaction(emoji)
+
+
+Context.react = _context_react
+
+
+def dump_perms(permissions: Permissions):
+    def perm_names():
+        for perm, value in permissions:
+            if value:
+                yield perm
+
+    return ', '.join(perm_names())
+
+
+class DumpCog(object):
+    def __init__(self, bot: Bot):
+        self.bot = bot
+
+    @command()
+    async def raw(self, ctx: CommandContext, message: Message):
+        content: str = message.content
+        escaped = content.replace('```', '``\u200B`')
+        await ctx.send(content=f'```\n{escaped}\n```')
+        await ctx.react('✅')
+
+    @command()
+    async def user(self, ctx: CommandContext, user: User, guild: Guild = None):
+        if guild is None and ctx.guild is not None:
+            guild: Guild = ctx.guild
+        profile: Profile = await user.profile()
+        description = ""
+        if profile.nitro:
+            description += f"i can haz animated emojis since {profile.premium_since}\n"
+        if profile.hypesquad:
+            description += f"they got some hype\n"
+        if profile.partner:
+            description += "insrt BLU INFINITY SYMBOL her\n"
+        if profile.staff:
+            description += "staff. if this is b1nzy, then FUCK him for banning selfbots\n"
+        mutual: List[Guild] = profile.mutual_guilds
+
+        mutual_text = '\n'.join(guild.name for guild in mutual)
+        if len(mutual_text) > 512:
+            mutual_text = f"Together in {len(mutual)} guilds. [Truncated]"
+
+        em = Embed(
+            title=str(user),
+            description=description,
+        )
+        if guild:
+            member: Member = guild.get_member(user.id)
+            if member:
+                if guild.owner_id == member.id:
+                    em.add_field(name="Owner", value="Yeah", inline=True)
+                em.colour = member.color
+                em.add_field(name="Joined Guild", value=member.joined_at, inline=True)
+                em.add_field(name="Permissions", value=dump_perms(member.guild_permissions), inline=True)
+        em.set_author(name=user.display_name, icon_url=user.avatar_url)
+        em.add_field(name="Mutual guilds", value=mutual_text, inline=True)
+        em.add_field(name="Joined Discord", value=user.created_at, inline=True)
+        for connection in profile.connected_accounts:
+            em.add_field(name=connection['type'], value=('☑' if connection['verified'] else '') + connection['name'],
+                         inline=True)
+        em.set_thumbnail(url=user.avatar_url)
+        await ctx.send(embed=em)
+        await ctx.react('✅')
+
+
+def setup(bot: Bot):
+    bot.add_cog(DumpCog(bot))
