@@ -1,6 +1,9 @@
+import re
+from asyncio import sleep
+from functools import wraps
 from typing import List
 
-from discord import User, Embed, Profile, Guild, Member, Permissions, Message
+from discord import User, Embed, Profile, Guild, Member, Permissions, Message, Role, Emoji, TextChannel
 from discord.ext.commands import Bot, command, Context as CommandContext, Context
 
 
@@ -20,6 +23,17 @@ def dump_perms(permissions: Permissions):
     return ', '.join(perm_names())
 
 
+def then_delete(cmd):
+    @wraps(cmd)
+    async def func(*args, **kwargs):
+        mes = await cmd(*args, **kwargs)
+        if mes and hasattr(mes, 'delete'):
+            await sleep(30)
+            await mes.delete()
+
+    return func
+
+
 class DumpCog(object):
     def __init__(self, bot: Bot):
         self.bot = bot
@@ -30,6 +44,50 @@ class DumpCog(object):
         escaped = content.replace('```', '``\u200B`')
         await ctx.send(content=f'```\n{escaped}\n```')
         await ctx.react('✅')
+
+    @command(aliases=['resolve'])
+    @then_delete
+    async def resolve_id(self, ctx: CommandContext, snowflake):
+        snowflake = re.sub(r'[^0-9]', '', snowflake)
+        if not snowflake:
+            return await ctx.send("No id")
+        snowflake = int(snowflake)
+        if snowflake <= 0:
+            return await ctx.send("Invalid id")
+        when = (snowflake >> 22) + 1420070400000
+        worker = (snowflake & 0x3E0000) >> 17
+        process = (snowflake & 0x1F000) >> 12
+        increment = snowflake & 0xFFF
+
+        channel: TextChannel = self.bot.get_channel(snowflake)
+        user: User = self.bot.get_user(snowflake)
+        guild: Guild = self.bot.get_guild(snowflake)
+        emoji: Emoji = self.bot.get_emoji(snowflake)
+        roles: List[Role] = [role for guild in self.bot.guilds for role in guild.roles if role.id == snowflake]
+        role: Role = roles[0] if len(roles) > 0 else None
+
+        embed = Embed(title=f"ID: {snowflake}")
+        embed.add_field(name="When", value=str(when))
+        embed.add_field(name="Worker", value=str(worker))
+        embed.add_field(name="Process", value=str(process))
+        embed.add_field(name="Increment", value=str(increment))
+
+        def add_if(name, thing, note=''):
+            if thing:
+                embed.add_field(name="Type", value=name)
+                embed.add_field(name="Data", value=f"```\n{thing!r}\n```{note}")
+                return True
+            return False
+
+        if not any(x for x in [
+            add_if("Guild", guild, "This may also be the default channel of the @everyone role of that server"),
+            add_if("Channel", channel),
+            add_if("User", user),
+            add_if("Role", role),
+            add_if("Emoji", emoji),
+        ]):
+            embed.add_field(name="Type", value="Not found.")
+        await ctx.send(embed=embed)
 
     @command()
     async def user(self, ctx: CommandContext, user: User, guild: Guild = None):

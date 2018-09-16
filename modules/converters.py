@@ -1,7 +1,58 @@
 from string import digits
 
 from discord import TextChannel
+from discord.ext import commands
 from discord.ext.commands import Converter, Context, Bot, BadArgument, converter
+
+LANGUAGES = {
+    'python': ['py', 'py3'],
+    'javascript': ['js'],
+    'c': ['c'],
+    'cpp': ['c++', 'cpp', 'cxx'],
+    'go': ['go'],
+    'bash': [],
+    'xml': [],
+    'html': [],
+}
+
+LANGUAGES_INV = {
+    **{v: k for k, v in LANGUAGES.items() for v in v},
+    **{k: k for k in LANGUAGES.keys()},
+}
+
+EXTENSIONS = dict(
+    python='py',
+    c='c',
+    cpp='cpp',
+    bash='sh',
+    javascript='js',
+)
+
+
+class CodeBlock:
+    missing_error = 'Missing code block. Please use the following markdown\n\\`\\`\\`language\ncode here\n\\`\\`\\`'
+
+    def __init__(self, argument):
+        try:
+            block, code = argument.split('\n', 1)
+        except ValueError:
+            raise commands.BadArgument(self.missing_error)
+
+        if not block.startswith('```') and not code.endswith('```'):
+            raise commands.BadArgument(self.missing_error)
+
+        language = block[3:]
+        self.language = self._get_language(language.lower())
+        self.source = code.rstrip('`')
+        self.extension = self._get_extension(self.language)
+
+    @staticmethod
+    def _get_extension(language):
+        return EXTENSIONS[language]
+
+    @staticmethod
+    def _get_language(language):
+        return LANGUAGES_INV.get(language)
 
 
 def is_int(text):
