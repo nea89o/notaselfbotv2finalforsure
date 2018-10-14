@@ -1,3 +1,4 @@
+import inspect
 import re
 from asyncio import sleep
 from functools import wraps
@@ -5,7 +6,8 @@ from typing import List
 
 from discord import User, Embed, Profile, Guild, Member, Permissions, Message, Role, Emoji, TextChannel
 from discord.ext.commands import Bot, command, Context as CommandContext, Context
-
+from discord.ext.commands import Paginator
+from datetime import datetime
 
 async def _context_react(self: Context, emoji):
     await self.message.add_reaction(emoji)
@@ -39,6 +41,14 @@ class DumpCog(object):
         self.bot = bot
 
     @command()
+    async def show_off(self, ctx: CommandContext, name: str):
+        paginator = Paginator(prefix="```py")
+        for line in inspect.getsource(self.bot.get_command(name).callback).split('\n'):
+            paginator.add_line(line.replace("`", "`\u200B"))
+        for page in paginator.pages:
+            await ctx.send(page)
+
+    @command()
     async def raw(self, ctx: CommandContext, message: Message):
         content: str = message.content
         escaped = content.replace('```', '``\u200B`')
@@ -67,7 +77,7 @@ class DumpCog(object):
         role: Role = roles[0] if len(roles) > 0 else None
 
         embed = Embed(title=f"ID: {snowflake}")
-        embed.add_field(name="When", value=str(when))
+        embed.add_field(name="When", value=str(when) + ' / ' + str(datetime.fromtimestamp(when)))
         embed.add_field(name="Worker", value=str(worker))
         embed.add_field(name="Process", value=str(process))
         embed.add_field(name="Increment", value=str(increment))
